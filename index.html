@@ -2,123 +2,118 @@
 <html lang="pt-br">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Premium Booking | Agendamento Online</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Premium Booking | Agendamento Profissional</title>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
-<script type="module">
-  // Firebase
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
-  import { getDatabase, ref, get, child, update } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-database.js";
-
-  const firebaseConfig = {
-    apiKey: "AIzaSyBvsywhqsxVWaYAZG79ooBwcrCUaLuFbB4",
-    authDomain: "comunicacao-app.firebaseapp.com",
-    databaseURL: "https://comunicacao-app-default-rtdb.firebaseio.com",
-    projectId: "comunicacao-app",
-    storageBucket: "comunicacao-app.appspot.com",
-    messagingSenderId: "544901303602",
-    appId: "1:544901303602:web:05083fa6a06fc6733a5b2b"
-  };
-
-  const app = initializeApp(firebaseConfig);
-  const db = getDatabase(app);
-
-  async function carregarServicos() {
-    const snapshot = await get(child(ref(db), 'servicos'));
-    const servicos = snapshot.exists() ? snapshot.val() : {};
-    const select = document.getElementById('selectServico');
-    select.innerHTML = Object.entries(servicos).map(([id, s]) => `<option value="${id}|${s.nome}|${s.valor}">${s.nome} - R$ ${s.valor}</option>`).join('');
-  }
-
-  async function carregarHorariosDoDia() {
-    const data = document.getElementById('dataFiltro').value;
-    const snapshot = await get(child(ref(db), 'agenda'));
-    const agenda = snapshot.exists() ? snapshot.val() : {};
-    const listaH = document.getElementById('listaHorarios');
-    const disponiveis = Object.entries(agenda)
-      .filter(([id, h]) => h.data === data && h.status === 'disponivel')
-      .sort((a,b) => a[1].hora.localeCompare(b[1].hora));
-
-    listaH.innerHTML = disponiveis.length ? disponiveis.map(([id,h]) => `
-      <div class="horario-card">
-        <div class="info-hora">${h.hora}</div>
-        <button class="btn-agendar" onclick="finalizarAgendamento('${id}', '${data}', '${h.hora}')">Reservar</button>
-      </div>
-    `).join('') : '<p class="vazio">Sem horários disponíveis para esta data.</p>';
-  }
-
-  async function finalizarAgendamento(id, data, hora) {
-    const nome = document.getElementById('nomeCliente').value.trim();
-    const whatsappFull = document.getElementById('whatsappCliente').value.trim();
-    if (nome.split(' ').length < 2) return alert("⚠️ Digite seu nome completo (Nome e Sobrenome).");
-    if (whatsappFull.length < 14) return alert("⚠️ Informe um WhatsApp válido.");
-
-    const [servicoId, servicoNome, servicoValor] = document.getElementById('selectServico').value.split('|');
-    const token = Math.random().toString(36).substr(2,6).toUpperCase();
-    const numeroLimpo = whatsappFull.replace(/\D/g, '');
-
-    await update(ref(db, 'agenda/' + id), { status:'ocupado', cliente:nome, whatsapp:whatsappFull, servico:servicoNome, token:token });
-
-    const dataFormatada = data.split('-').reverse().join('/');
-    const msg = `📌 *CONFIRMAÇÃO DE AGENDAMENTO*%0A------------------------------------------%0A%0AOlá, *${nome}*! Seu horário foi reservado.%0A%0A📝 *DETALHES*%0A🔹 *Serviço:* ${servicoNome}%0A🔹 *Valor:* R$ ${servicoValor}%0A📅 *Data:* ${dataFormatada}%0A⏰ *Horário:* ${hora}%0A%0A------------------------------------------%0A🔑 *TOKEN DE SEGURANÇA:* *${token}*%0A------------------------------------------%0A%0A_Aguardamos sua visita!_%0A*UPbot®*`;
-
-    alert(`✅ Agendamento Realizado!\nTOKEN: ${token}\n\nClique em OK para enviar o comprovante.`);
-    window.location.href = `https://wa.me/55${numeroLimpo}?text=${msg}`;
-  }
-
-  async function validarCancelamento() {
-    const token = document.getElementById('tokenCancelamento').value.trim().toUpperCase();
-    const snapshot = await get(child(ref(db), 'agenda'));
-    const agenda = snapshot.exists() ? snapshot.val() : {};
-    const agendamentoEntry = Object.entries(agenda).find(([id,h]) => h.token === token);
-
-    if (agendamentoEntry) {
-      const [id,h] = agendamentoEntry;
-      window.agendamentoParaCancelar = { id, ...h };
-      document.getElementById('detalhesCancelamento').innerHTML = `Deseja cancelar o serviço de <b>${h.servico}</b> no dia <b>${h.data.split('-').reverse().join('/')}</b> às <b>${h.hora}</b>?`;
-      document.getElementById('modalCancelamento').style.display = 'flex';
-    } else {
-      alert("❌ Token inválido ou não encontrado.");
-    }
-  }
-
-  async function confirmarExclusaoFinal() {
-    const id = window.agendamentoParaCancelar.id;
-    await update(ref(db, 'agenda/' + id), { status:'disponivel', cliente:null, whatsapp:null, token:null, servico:null });
-    fecharModal();
-    alert("✅ Cancelado com sucesso.");
-    carregarHorariosDoDia();
-  }
-
-  function fecharModal() {
-    document.getElementById('modalCancelamento').style.display = 'none';
-    window.agendamentoParaCancelar = null;
-  }
-
-  function configurarDataMinima() {
-    const hoje = new Date().toISOString().split('T')[0];
-    const input = document.getElementById('dataFiltro');
-    input.min = hoje;
-    input.value = hoje;
-    carregarHorariosDoDia();
-  }
-
-  document.getElementById('whatsappCliente').addEventListener('input', e => {
-    let x = e.target.value.replace(/\D/g, '').match(/(\d{0,2})(\d{0,5})(\d{0,4})/);
-    e.target.value = !x[2] ? x[1] : '(' + x[1] + ') ' + x[2] + (x[3] ? '-' + x[3] : '');
-  });
-
-  window.onload = () => {
-    carregarServicos();
-    configurarDataMinima();
-  };
-</script>
-
 <style>
-  /* CSS completo do Cliente, igual ao que você me enviou */
-  /* Pode usar exatamente o que já tínhamos, incluindo cores, botões, modal etc */
+:root {
+    --primary: #4f46e5;
+    --primary-light: #eef2ff;
+    --secondary: #64748b;
+    --bg: #f1f5f9;
+    --surface: #ffffff;
+    --text-main: #0f172a;
+    --text-secondary: #64748b;
+    --danger: #ef4444;
+    --border: #e2e8f0;
+    --radius-lg: 16px;
+    --radius-md: 10px;
+    --shadow: 0 10px 15px -3px rgba(0,0,0,0.05);
+}
+
+* { box-sizing: border-box; outline: none; }
+
+body {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    margin: 0;
+    background: var(--bg);
+    display: flex;
+    justify-content: center;
+}
+
+.app-container {
+    width: 100%;
+    max-width: 480px;
+    background: var(--surface);
+    min-height: 100vh;
+    position: relative;
+    box-shadow: var(--shadow);
+}
+
+.app-header {
+    padding: 60px 24px 45px;
+    background: var(--primary);
+    color: white;
+    border-radius: 0 0 40px 40px;
+    text-align: center;
+}
+
+.app-header h2 { margin:0; font-size:1.7rem; font-weight:800; }
+.app-header p { margin:10px 0 0; opacity:0.9; font-size:0.95rem; }
+
+.tabs {
+    display:flex; padding:0 24px; gap:12px; margin-top:-22px;
+}
+
+.tab-btn {
+    flex:1; padding:14px; border:none; border-radius:var(--radius-md);
+    background:white; color:var(--text-secondary); font-weight:700;
+    cursor:pointer; transition:0.3s;
+}
+.tab-btn.active { color:var(--primary); border:1px solid var(--primary); transform:translateY(-2px); }
+
+.content-section { padding:32px 24px; display:none; }
+.content-section.active { display:block; animation:fadeIn 0.4s ease-out; }
+
+.form-group { margin-bottom:20px; }
+label { display:block; margin-bottom:8px; font-weight:700; font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; }
+
+.input-wrapper { position:relative; display:flex; align-items:center; }
+.input-wrapper i { position:absolute; left:18px; color:var(--primary); opacity:0.8; }
+
+input, select {
+    width:100%; padding:16px 16px 16px 52px;
+    border:2px solid var(--bg);
+    background: var(--bg); border-radius:var(--radius-md); font-size:15px;
+    transition:0.2s; font-family:inherit; font-weight:500;
+}
+
+input:focus { border-color:var(--primary); background:white; }
+
+.horario-card {
+    background:white; border:1px solid var(--border);
+    padding:18px; margin-bottom:12px; border-radius:var(--radius-md);
+    display:flex; justify-content:space-between; align-items:center;
+    transition:0.3s;
+}
+.horario-card:hover { transform:translateY(-2px); border-color:var(--primary); box-shadow:var(--shadow); }
+
+.info-hora { font-size:1.2rem; font-weight:800; color:var(--text-main); }
+
+.btn-agendar {
+    background:var(--primary); color:white; border:none;
+    padding:12px 22px; border-radius:12px; font-weight:700; cursor:pointer; transition:0.2s;
+}
+.btn-agendar:active { transform:scale(0.95); }
+
+.modal-overlay {
+    position:fixed; top:0; left:0; width:100%; height:100%;
+    background: rgba(15,23,42,0.8); display:none;
+    align-items:center; justify-content:center; z-index:1000; padding:20px;
+}
+.modal-card {
+    background:white; padding:30px; border-radius:var(--radius-lg);
+    max-width:400px; width:100%; text-align:center; animation:fadeIn 0.3s ease;
+}
+.modal-buttons { display:flex; gap:10px; margin-top:25px; }
+.btn-modal { flex:1; padding:14px; border-radius:12px; border:none; font-weight:700; cursor:pointer; }
+.btn-confirm { background:var(--danger); color:white; }
+.btn-cancel { background:#e2e8f0; color:var(--text-main); }
+
+.vazio { text-align:center; color:var(--text-secondary); padding:40px; border:2px dashed var(--border); border-radius:var(--radius-lg); }
+
+.dev-stamp { text-align:center; font-size:0.65rem; color:#94a3b8; margin:40px 0 24px; letter-spacing:2px; text-transform:uppercase; }
 </style>
 </head>
 <body>
@@ -130,10 +125,10 @@
     </div>
 
     <div class="tabs">
-        <button class="tab-btn active" onclick="switchTab('agendar')">Agendar</button>
-        <button class="tab-btn" onclick="switchTab('cancelar')">Meus Agendamentos</button>
+        <button class="tab-btn active" onclick="switchTab(event,'agendar')">Agendar</button>
+        <button class="tab-btn" onclick="switchTab(event,'cancelar')">Meus Agendamentos</button>
     </div>
-    
+
     <div id="tab-agendar" class="content-section active">
         <div class="form-group">
             <label>Nome Completo</label>
@@ -142,7 +137,6 @@
                 <input type="text" id="nomeCliente" placeholder="Ex: João Silva">
             </div>
         </div>
-
         <div class="form-group">
             <label>WhatsApp</label>
             <div class="input-wrapper">
@@ -150,7 +144,6 @@
                 <input type="tel" id="whatsappCliente" placeholder="(00) 00000-0000" maxlength="15">
             </div>
         </div>
-        
         <div class="form-group">
             <label>Serviço Desejado</label>
             <div class="input-wrapper">
@@ -158,7 +151,6 @@
                 <select id="selectServico"></select>
             </div>
         </div>
-
         <div class="form-group">
             <label>Escolha a Data</label>
             <div class="input-wrapper">
@@ -166,7 +158,6 @@
                 <input type="date" id="dataFiltro" onchange="carregarHorariosDoDia()">
             </div>
         </div>
-
         <div id="listaHorarios"></div>
     </div>
 
@@ -175,10 +166,10 @@
             <label>Código Token</label>
             <div class="input-wrapper">
                 <i class="fa-solid fa-key"></i>
-                <input type="text" id="tokenCancelamento" placeholder="Ex: A1B2C3" style="text-transform: uppercase;">
+                <input type="text" id="tokenCancelamento" placeholder="Ex: A1B2C3" style="text-transform:uppercase;">
             </div>
         </div>
-        <button class="btn-agendar" style="width: 100%; background: var(--danger);" onclick="validarCancelamento()">Verificar Agendamento</button>
+        <button class="btn-agendar" style="width:100%; background:var(--danger);" onclick="validarCancelamento()">Verificar Agendamento</button>
     </div>
 
     <div class="dev-stamp">Developer: UPbot®</div>
@@ -186,9 +177,9 @@
 
 <div id="modalCancelamento" class="modal-overlay">
     <div class="modal-card">
-        <i class="fa-solid fa-circle-exclamation" style="font-size: 3rem; color: var(--danger); margin-bottom: 15px;"></i>
+        <i class="fa-solid fa-circle-exclamation" style="font-size:3rem;color:var(--danger);margin-bottom:15px;"></i>
         <h3 style="margin:0">Confirmar Cancelamento?</h3>
-        <p id="detalhesCancelamento" style="margin-top:15px; color: var(--text-secondary);"></p>
+        <p id="detalhesCancelamento" style="margin-top:15px;color:var(--text-secondary);"></p>
         <div class="modal-buttons">
             <button class="btn-modal btn-cancel" onclick="fecharModal()">Voltar</button>
             <button class="btn-modal btn-confirm" onclick="confirmarExclusaoFinal()">Confirmar</button>
@@ -196,5 +187,109 @@
     </div>
 </div>
 
+<script>
+let agendamentoParaCancelar = null;
+const horariosPadrao = ["06:00","07:00","08:00","09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00","19:00","20:00","21:00","22:00","23:00","00:00"];
+
+function switchTab(event, tab){
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.content-section').forEach(s=>s.classList.remove('active'));
+    event.currentTarget.classList.add('active');
+    document.getElementById('tab-'+tab).classList.add('active');
+}
+
+function configurarDataMinima(){
+    const hoje = new Date().toISOString().split('T')[0];
+    const input = document.getElementById('dataFiltro');
+    input.min = hoje;
+    input.value = hoje;
+}
+
+function carregarServicos(){
+    if(!localStorage.getItem('servicos')){
+        // Inicializa com alguns serviços padrão
+        localStorage.setItem('servicos', JSON.stringify([
+            {nome:"Corte Masculino", valor:"40,00"},
+            {nome:"Barba Completa", valor:"30,00"},
+            {nome:"Combo (Corte + Barba)", valor:"60,00"}
+        ]));
+    }
+    const servicos = JSON.parse(localStorage.getItem('servicos'));
+    document.getElementById('selectServico').innerHTML = servicos.map(s=>`<option value="${s.nome}|${s.valor}">${s.nome} - R$ ${s.valor}</option>`).join('');
+}
+
+document.getElementById('whatsappCliente').addEventListener('input', e=>{
+    let x=e.target.value.replace(/\D/g,'').match(/(\d{0,2})(\d{0,5})(\d{0,4})/);
+    e.target.value = !x[2]?x[1]:'('+x[1]+') '+x[2]+(x[3]?'-'+x[3]:'');
+});
+
+function carregarHorariosDoDia(){
+    const data = document.getElementById('dataFiltro').value;
+    const agenda = JSON.parse(localStorage.getItem('agenda')||'[]');
+    const listaH = document.getElementById('listaHorarios');
+    const disponiveis = agenda.filter(i=>i.data===data && i.status==='disponivel').sort((a,b)=>a.hora.localeCompare(b.hora));
+    listaH.innerHTML = disponiveis.length?disponiveis.map(i=>`
+        <div class="horario-card">
+            <div class="info-hora">${i.hora}</div>
+            <button class="btn-agendar" onclick="finalizarAgendamento('${i.data}','${i.hora}')">Reservar</button>
+        </div>
+    `).join(''):'<p class="vazio">Sem horários disponíveis para esta data.</p>';
+}
+
+function finalizarAgendamento(data,hora){
+    const nome=document.getElementById('nomeCliente').value.trim();
+    const whatsappFull=document.getElementById('whatsappCliente').value.trim();
+    if(nome.split(' ').length<2){ alert("⚠️ Digite seu nome completo."); return; }
+    if(whatsappFull.length<14){ alert("⚠️ Informe um WhatsApp válido."); return; }
+    const [servicoNome, servicoValor] = document.getElementById('selectServico').value.split('|');
+    const token = Math.random().toString(36).substr(2,6).toUpperCase();
+    const numeroLimpo = whatsappFull.replace(/\D/g,'');
+    let agenda = JSON.parse(localStorage.getItem('agenda')||'[]');
+    agenda = agenda.map(i=>i.data===data && i.hora===hora?{...i,status:'ocupado',cliente:nome,whatsapp:whatsappFull,servico:servicoNome,token:token}:i);
+    localStorage.setItem('agenda', JSON.stringify(agenda));
+    const dataFormatada = data.split('-').reverse().join('/');
+    const msg = `📌 *CONFIRMAÇÃO DE AGENDAMENTO*%0A------------------------------------------%0A%0AOlá, *${nome}*! Seu horário foi reservado.%0A📝 *DETALHES*%0A🔹 *Serviço:* ${servicoNome}%0A🔹 *Valor:* R$ ${servicoValor}%0A📅 *Data:* ${dataFormatada}%0A⏰ *Horário:* ${hora}%0A------------------------------------------%0A🔑 *TOKEN DE SEGURANÇA:* *${token}*%0A------------------------------------------%0A_Aguardamos sua visita!_%0A*UPbot®*`;
+    alert(`✅ Agendamento Realizado!\nTOKEN: ${token}\nClique em OK para enviar o comprovante.`);
+    window.location.href=`https://wa.me/55${numeroLimpo}?text=${msg}`;
+}
+
+function validarCancelamento(){
+    const token = document.getElementById('tokenCancelamento').value.trim().toUpperCase();
+    const agenda = JSON.parse(localStorage.getItem('agenda')||'[]');
+    const agendamento = agenda.find(i=>i.token===token);
+    if(agendamento){
+        agendamentoParaCancelar = agendamento;
+        document.getElementById('detalhesCancelamento').innerHTML = `Deseja cancelar o serviço de <b>${agendamento.servico}</b> no dia <b>${agendamento.data.split('-').reverse().join('/')}</b> às <b>${agendamento.hora}</b>?`;
+        document.getElementById('modalCancelamento').style.display='flex';
+    } else { alert("❌ Token inválido ou não encontrado."); }
+}
+
+function fecharModal(){ document.getElementById('modalCancelamento').style.display='none'; agendamentoParaCancelar=null; }
+
+function confirmarExclusaoFinal(){
+    let agenda = JSON.parse(localStorage.getItem('agenda')||'[]');
+    agenda = agenda.map(i=>i.token===agendamentoParaCancelar.token?{...i,status:'disponivel',cliente:null,whatsapp:null,token:null,servico:null}:i);
+    localStorage.setItem('agenda',JSON.stringify(agenda));
+    fecharModal();
+    alert("✅ Cancelado com sucesso.");
+    carregarHorariosDoDia();
+}
+
+function inicializarAgenda(){
+    if(!localStorage.getItem('agenda')){
+        const dataHoje = new Date().toISOString().split('T')[0];
+        const agenda = [];
+        horariosPadrao.forEach(hora=>{
+            agenda.push({data:dataHoje,hora:hora,status:'disponivel'});
+        });
+        localStorage.setItem('agenda',JSON.stringify(agenda));
+    }
+}
+
+configurarDataMinima();
+carregarServicos();
+inicializarAgenda();
+carregarHorariosDoDia();
+</script>
 </body>
 </html>
